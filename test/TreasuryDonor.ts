@@ -31,7 +31,7 @@ describe("TreasuryDonor", function () {
         const donateAmount = ethers.parseEther("0.35");
     
         await expect(treasuryDonorContract.connect(donor_account).donate({ value: donateAmount }))
-            .to.emit(treasuryDonorContract, "Donated")
+            .to.emit(treasuryDonorContract, "DonationReceived")
             .withArgs(donor_account.address, ethers.parseEther("0.35"));
     });
 
@@ -39,7 +39,7 @@ describe("TreasuryDonor", function () {
         const donateAmount = ethers.parseEther("0.35");
 
         await expect(treasuryDonorContract.connect(donor_account_2).donate({ value: donateAmount }))
-        .to.emit(treasuryDonorContract, "NFTRewarded")
+        .to.emit(treasuryDonorContract, "NFTMinted")
         .withArgs(donor_account_2.address, NFTLevel.Silver);
     });
 
@@ -54,15 +54,15 @@ describe("TreasuryDonor", function () {
     it("Treasury Update with non-owner", async function() {
         const [new_treasury] = await hre.ethers.getSigners();
 
-        await expect(treasuryDonorContract.connect(donor_account).setTreasuryAddress(new_treasury.address))
-            .to.be.revertedWith("Only owner can call this function");
+        await expect(treasuryDonorContract.connect(donor_account).updateTreasuryWallet(new_treasury.address))
+            .to.be.revertedWith("Only the contract owner can call this function");
     });
 
     it("Treasury Update", async function() {
         const [new_treasury] = await hre.ethers.getSigners();
 
-        await expect(treasuryDonorContract.connect(owner_account).setTreasuryAddress(new_treasury.address))
-            .to.emit(treasuryDonorContract, "TreasuryUpdated")
+        await expect(treasuryDonorContract.connect(owner_account).updateTreasuryWallet(new_treasury.address))
+            .to.emit(treasuryDonorContract, "TreasuryWalletUpdated")
             .withArgs(new_treasury.address);
     });
 
