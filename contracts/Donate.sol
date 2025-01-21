@@ -3,10 +3,11 @@ pragma solidity ^0.8.28;
 
 contract Donate {
     address public owner;
-    address public treasury_address;
-    uint256 public min_donation_amount;
+    address public treasuryAddress;
+    uint256 public minDonationAmount;
 
     mapping(address => uint256) public donations;
+    mapping(address => uint256) public donorLvls;
 
     event Donated(address indexed donor, uint256 amount);
     event FundsWithdrawn(address indexed owner, uint256 amount);
@@ -17,28 +18,28 @@ contract Donate {
         _;
     }
 
-    constructor(address _treasury_address, uint256 _min_donation_amount) {
+    constructor(address _treasuryAddress, uint256 _minDonationAmount) {
         owner = msg.sender;
-        treasury_address = _treasury_address;
-        min_donation_amount = _min_donation_amount;
+        treasuryAddress = _treasuryAddress;
+        minDonationAmount = _minDonationAmount;
     }
 
     function donate() public payable {
-        require(msg.value >= min_donation_amount, "Donation amount too small");
+        require(msg.value >= minDonationAmount, "Donation amount too small");
         donations[msg.sender] += msg.value;
-        payable(treasury_address).transfer(msg.value);
+        payable(treasuryAddress).transfer(msg.value);
 
         emit Donated(msg.sender, msg.value);
     }
 
-    function setTreasuryAddress(address _treasury_address) public onlyOwner {
+    function setTreasuryAddress(address _treasuryAddress) public onlyOwner {
         require(
-            treasury_address != _treasury_address &&
-                _treasury_address != address(0)
+            treasuryAddress != _treasuryAddress &&
+                _treasuryAddress != address(0)
         );
-        treasury_address = _treasury_address;
+        treasuryAddress = _treasuryAddress;
 
-        emit TreasuryUpdated(_treasury_address);
+        emit TreasuryUpdated(_treasuryAddress);
     }
 
     function getBalance() public view returns (uint256) {
