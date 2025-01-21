@@ -1,120 +1,180 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.28;
 
-import "hardhat/console.sol";
-
 import "@openzeppelin/contracts/token/ERC721/extensions/ERC721URIStorage.sol";
+import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 
-contract TreasuryDonor is ERC721URIStorage {
-    address public owner;
-    address public treasuryAddress;
-    uint256 public donationMinAmount;
-    uint256 public nftCnt = 0;
+contract TreasuryDonor is ERC721URIStorage, ReentrancyGuard {
+    address public immutable contractOwner;
+    address public treasuryWallet;
+    uint256 public immutable minimumDonation;
+    uint256 public totalMintedNFTs;
 
-    enum NFTLevel {
+    enum DonationLevel {
         Bronze,
         Silver,
         Gold
     }
 
-    struct NFTMetadata {
-        uint256 tokenId;
-        NFTLevel level;
-        string uri;
+    struct DonorData {
+        uint256 cumulativeDonations;
+        uint256 nftTokenId;
+        DonationLevel currentLevel;
     }
 
-    mapping(address => uint256) public donations;
-    mapping(address => NFTMetadata) public nftMetadatas;
-    mapping(NFTLevel => string) public nftLevelToUri;
+    mapping(address => DonorData) public donorDetails;
+    mapping(DonationLevel => string) public donationLevelToURI;
 
-    event Donated(address indexed donor, uint256 amount);
-    event NFTRewarded(address indexed donor, NFTLevel newLevel);
-    event NFTUpgraded(address indexed donor, NFTLevel newLevel);
-    event TreasuryUpdated(address indexed treasury);
+    event DonationReceived(address indexed donor, uint256 amount);
+    event NFTMinted(address indexed donor, DonationLevel level);
+    event NFTUpgraded(address indexed donor, DonationLevel newLevel);
+    event TreasuryWalletUpdated(address indexed newTreasuryWallet);
 
-    modifier onlyOwner() {
-        require(msg.sender == owner, "Only owner can call this function");
+    modifier onlyContractOwner() {
+        require(
+            msg.sender == contractOwner,
+            "Only the contract owner can call this function"
+        );
         _;
     }
 
     constructor(
-        address _treasuryAddress,
-        uint256 _donationMinAmount
+        address _treasuryWallet,
+        uint256 _minimumDonation
     ) ERC721("CODE Donor", "CD") {
-        owner = msg.sender;
-        treasuryAddress = _treasuryAddress;
-        donationMinAmount = _donationMinAmount;
+        require(
+            _treasuryWallet != address(0),
+            "Invalid treasury wallet address"
+        );
+        require(_minimumDonation > 0, "Minimum donation must be positive");
 
-        nftLevelToUri[
-            NFTLevel.Bronze
+        contractOwner = msg.sender;
+        treasuryWallet = _treasuryWallet;
+        minimumDonation = _minimumDonation;
+
+        // Initialize default URIs for donation levels
+        donationLevelToURI[
+            DonationLevel.Bronze
         ] = "https://ipfs.io/ipfs/bafkreifrggkzkzfpdkz56vibku2rrx2ssj5qydg3tuk46vpxnyb2qjys6i";
-        nftLevelToUri[
-            NFTLevel.Silver
+        donationLevelToURI[
+            DonationLevel.Silver
         ] = "https://ipfs.io/ipfs/bafkreidl7z2f5bqta7unt7h2ozlxsg7ql23wvoszvbwxg6a4osklfzch3y";
-        nftLevelToUri[
-            NFTLevel.Gold
+        donationLevelToURI[
+            DonationLevel.Gold
         ] = "https://ipfs.io/ipfs/bafkreib3og7wotiqbydwbma5av6xq4qsglsgz2nvopcukg2wfb7v6nin2q";
     }
 
-    function donate() public payable {
-        require(msg.value >= donationMinAmount, "Donation amount too small");
-        donations[msg.sender] += msg.value;
-        payable(treasuryAddress).transfer(msg.value);
+    /// @dev Allows donors to send ETH and receive or upgrade NFTs.
+    function donate() external payable nonReentrant {
+        require(msg.value >= minimumDonation, "Donation amount is too small");
 
-        emit Donated(msg.sender, msg.value);
+        // Transfer funds to the treasury wallet
+        (bool success, ) = treasuryWallet.call{value: msg.value}("");
+        require(success, "Failed to transfer funds to the treasury wallet");
 
-        rewardNFT(msg.sender);
+        // Update donor data
+        DonorData storage donorData = donorDetails[msg.sender];
+        donorData.cumulativeDonations += msg.value;
+
+        emit DonationReceived(msg.sender, msg.value);
+
+        // Handle NFT minting or upgrading
+        _handleNFTReward(msg.sender, donorData);
     }
 
-    function setTreasuryAddress(address _treasuryAddress) public onlyOwner {
+    /// @dev Updates the treasury wallet address. Only callable by the contract owner.
+    function updateTreasuryWallet(
+        address _newTreasuryWallet
+    ) external onlyContractOwner {
         require(
-            treasuryAddress != _treasuryAddress &&
-                _treasuryAddress != address(0)
+            _newTreasuryWallet != address(0),
+            "Invalid treasury wallet address"
         );
-        treasuryAddress = _treasuryAddress;
+        require(
+            treasuryWallet != _newTreasuryWallet,
+            "New address is the same as the current address"
+        );
 
-        emit TreasuryUpdated(_treasuryAddress);
+        treasuryWallet = _newTreasuryWallet;
+        emit TreasuryWalletUpdated(_newTreasuryWallet);
     }
 
-    function rewardNFT(address donor) internal {
-        NFTLevel lvl = _determineNFTLvl(donor);
-
-        if (nftMetadatas[donor].tokenId == 0) {
-            _mintNFT(donor, lvl);
-        } else if (nftMetadatas[donor].level != lvl) {
-            upgradeNFTLevel(donor, lvl);
-        }
+    /// @dev Updates the URI for a specific donation level. Only callable by the contract owner.
+    function setDonationLevelURI(
+        DonationLevel _level,
+        string calldata _uri
+    ) external onlyContractOwner {
+        require(bytes(_uri).length > 0, "URI cannot be empty");
+        donationLevelToURI[_level] = _uri;
     }
 
-    function upgradeNFTLevel(address _nftOwner, NFTLevel _lvl) internal {
-        nftMetadatas[_nftOwner].level = _lvl;
-
-        emit NFTUpgraded(_nftOwner, _lvl);
-    }
-
-    function _determineNFTLvl(address donor) internal view returns (NFTLevel) {
-        uint256 donationAmount = donations[donor];
-
-        if (donationAmount >= 0.1 ether) {
-            return NFTLevel.Gold;
-        } else if (donationAmount >= 0.05 ether) {
-            return NFTLevel.Silver;
+    /// @dev Determines the NFT level based on the total donations of the donor.
+    function _getDonationLevel(
+        uint256 totalDonations
+    ) internal pure returns (DonationLevel) {
+        if (totalDonations >= 0.5 ether) {
+            return DonationLevel.Gold;
+        } else if (totalDonations >= 0.2 ether) {
+            return DonationLevel.Silver;
         } else {
-            return NFTLevel.Bronze;
+            return DonationLevel.Bronze;
         }
     }
 
-    function _mintNFT(address _recipient, NFTLevel _lvl) internal {
-        nftCnt++;
-        _mint(_recipient, nftCnt);
-        _setTokenURI(nftCnt, nftLevelToUri[_lvl]);
+    /// @dev Handles the NFT reward logic (minting or upgrading) for a donor.
+    function _handleNFTReward(
+        address donor,
+        DonorData storage donorData
+    ) internal {
+        DonationLevel newLevel = _getDonationLevel(
+            donorData.cumulativeDonations
+        );
 
-        nftMetadatas[_recipient] = NFTMetadata({
-            tokenId: nftCnt,
-            level: _lvl,
-            uri: nftLevelToUri[_lvl]
-        });
+        if (donorData.nftTokenId == 0) {
+            // Mint a new NFT if the donor doesn't have one
+            _mintNFT(donor, newLevel, donorData);
+        } else if (donorData.currentLevel != newLevel) {
+            // Upgrade the existing NFT if the level has changed
+            _upgradeNFT(donor, newLevel, donorData);
+        }
+    }
 
-        emit NFTRewarded(_recipient, _lvl);
+    /// @dev Mints a new NFT for the donor.
+    function _mintNFT(
+        address donor,
+        DonationLevel level,
+        DonorData storage donorData
+    ) internal {
+        totalMintedNFTs++;
+        uint256 newTokenId = totalMintedNFTs;
+
+        _mint(donor, newTokenId);
+        _setTokenURI(newTokenId, donationLevelToURI[level]);
+
+        donorData.nftTokenId = newTokenId;
+        donorData.currentLevel = level;
+
+        emit NFTMinted(donor, level);
+    }
+
+    /// @dev Upgrades the level and URI of an existing NFT.
+    function _upgradeNFT(
+        address donor,
+        DonationLevel newLevel,
+        DonorData storage donorData
+    ) internal {
+        donorData.currentLevel = newLevel;
+        _setTokenURI(donorData.nftTokenId, donationLevelToURI[newLevel]);
+
+        emit NFTUpgraded(donor, newLevel);
+    }
+
+    /// @dev Fallback function to prevent accidental Ether loss.
+    receive() external payable {
+        revert("Use the donate function to send ETH");
+    }
+
+    fallback() external payable {
+        revert("Invalid function call");
     }
 }
