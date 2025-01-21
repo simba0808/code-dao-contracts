@@ -6,7 +6,7 @@ async function main() {
         const donate_amount_min = ethers.parseEther("0.0015");
     
         // Get the ContractFactory of your SimpleContract
-        const DonateContract = await hre.ethers.getContractFactory("Donate");
+        const DonateContract = await hre.ethers.getContractFactory("TreasuryDonor");
 
         // Deploy the contract
         const contract = await DonateContract.deploy("0xf907e8cEC2A0575B4e895eB7720300F88694022e", donate_amount_min);
