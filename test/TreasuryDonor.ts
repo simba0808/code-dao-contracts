@@ -24,7 +24,7 @@ describe("TreasuryDonor", function () {
         donor_account_2 = _donor_wallet_2;
 
         const DonateContract = await ethers.getContractFactory("TreasuryDonor", owner_account);
-        treasuryDonorContract = await DonateContract.deploy(treasury_account.address, 100000);
+        treasuryDonorContract = await DonateContract.deploy(owner_account.address, treasury_account.address, 100000);
     });
 
     it("Donate funds", async function() {
@@ -55,7 +55,7 @@ describe("TreasuryDonor", function () {
         const [new_treasury] = await hre.ethers.getSigners();
 
         await expect(treasuryDonorContract.connect(donor_account).updateTreasuryWallet(new_treasury.address))
-            .to.be.revertedWith("Only the contract owner can call this function");
+            .to.be.revertedWithCustomError(treasuryDonorContract, "OwnableUnauthorizedAccount");
     });
 
     it("Treasury Update", async function() {
@@ -65,5 +65,13 @@ describe("TreasuryDonor", function () {
             .to.emit(treasuryDonorContract, "TreasuryWalletUpdated")
             .withArgs(new_treasury.address);
     });
+
+    it("Transfer Ownership", async function() {
+        const [new_owner] = await hre.ethers.getSigners();
+        
+        await expect(treasuryDonorContract.connect(owner_account).transferOwnership(new_owner.address))
+            .to.emit(treasuryDonorContract, "OwnershipTransferred")
+            .withArgs(owner_account.address, new_owner.address);
+    })
 
 });

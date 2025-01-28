@@ -3,9 +3,9 @@ pragma solidity ^0.8.28;
 
 import "@openzeppelin/contracts/token/ERC721/extensions/ERC721URIStorage.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import "@openzeppelin/contracts/access/Ownable.sol";
 
-contract TreasuryDonor is ERC721URIStorage, ReentrancyGuard {
-    address public immutable contractOwner;
+contract TreasuryDonor is Ownable, ERC721URIStorage, ReentrancyGuard {
     address public treasuryWallet;
     uint256 public immutable minimumDonation;
     uint256 public totalMintedNFTs;
@@ -30,25 +30,17 @@ contract TreasuryDonor is ERC721URIStorage, ReentrancyGuard {
     event NFTUpgraded(address indexed donor, DonationLevel newLevel);
     event TreasuryWalletUpdated(address indexed newTreasuryWallet);
 
-    modifier onlyContractOwner() {
-        require(
-            msg.sender == contractOwner,
-            "Only the contract owner can call this function"
-        );
-        _;
-    }
-
     constructor(
+        address _owner,
         address _treasuryWallet,
         uint256 _minimumDonation
-    ) ERC721("CODE Donor", "CD") {
+    ) ERC721("CODE Donor", "CD") Ownable(_owner) {
         require(
             _treasuryWallet != address(0),
             "Invalid treasury wallet address"
         );
         require(_minimumDonation > 0, "Minimum donation must be positive");
 
-        contractOwner = msg.sender;
         treasuryWallet = _treasuryWallet;
         minimumDonation = _minimumDonation;
 
@@ -85,7 +77,7 @@ contract TreasuryDonor is ERC721URIStorage, ReentrancyGuard {
     /// @dev Updates the treasury wallet address. Only callable by the contract owner.
     function updateTreasuryWallet(
         address _newTreasuryWallet
-    ) external onlyContractOwner {
+    ) external onlyOwner {
         require(
             _newTreasuryWallet != address(0),
             "Invalid treasury wallet address"
@@ -103,7 +95,7 @@ contract TreasuryDonor is ERC721URIStorage, ReentrancyGuard {
     function setDonationLevelURI(
         DonationLevel _level,
         string calldata _uri
-    ) external onlyContractOwner {
+    ) external onlyOwner {
         require(bytes(_uri).length > 0, "URI cannot be empty");
         donationLevelToURI[_level] = _uri;
     }
