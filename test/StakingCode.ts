@@ -17,14 +17,28 @@ describe("StakingCode", function() {
 
         const CodeTokenContract = await ethers.getContractFactory("Code")
         tokenContract = await CodeTokenContract.connect(owner).deploy();
-    
+        await tokenContract.connect(owner).mint(owner.address, 100000);
+        await tokenContract.connect(owner).transfer(staker.address, 10000);
+        
 
         const _StakingContract = await ethers.getContractFactory("CodeStake");
         StakingContract = await _StakingContract.connect(owner).deploy(owner.address, await tokenContract.getAddress());
     });
 
+    it("deposit reward", async function() {
+        await tokenContract.connect(owner).approve(await StakingContract.getAddress(), 10000);
+        await expect(StakingContract.depositReward(10000))
+            .to.emit(StakingContract, "RewardDeposited")
+            .withArgs(10000);
+    });
+
+    it("withdraw reward", async function() {
+        await expect(StakingContract.withdrawReward(1000))
+            .to.emit(StakingContract, "RewardWithdrawn")
+            .withArgs(1000);
+    });
+
     it("staking", async function() {
-        await tokenContract.connect(owner).mint(staker.address, 10000);
         await tokenContract.connect(staker).approve(await StakingContract.getAddress(), 10000);
 
         await expect(StakingContract.connect(staker).stake(1000, 7 * 24 * 3600))
