@@ -24,7 +24,10 @@ contract CodeStake is Ownable, ReentrancyGuard {
         codeToken = IERC20(_tokenAddress);
     }
 
-    function stake(uint256 _amount, uint256 _lockInPeriod) external {
+    function stake(
+        uint256 _amount,
+        uint256 _lockInPeriod
+    ) external nonReentrant {
         require(_amount > 0, "Amount must be greater than 0");
 
         uint256 rewardRate = _getRewardRate(_lockInPeriod);
@@ -47,7 +50,7 @@ contract CodeStake is Ownable, ReentrancyGuard {
         emit Staked(msg.sender, _amount, _lockInPeriod, rewardRate);
     }
 
-    function unstake(uint256 _positionIndex) external {
+    function unstake(uint256 _positionIndex) external nonReentrant {
         Position storage position = positions[msg.sender][_positionIndex];
         require(!position.withdrawn, "Position already withdrawn");
         require(position.amount > 0, "Invalid stake");
@@ -59,7 +62,7 @@ contract CodeStake is Ownable, ReentrancyGuard {
             penalty = (stakedAmount * 10) / 100;
             stakedAmount -= penalty;
         }
-        
+
         position.withdrawn = true;
         codeToken.transfer(msg.sender, stakedAmount);
         totalStaked -= position.amount;
@@ -67,7 +70,7 @@ contract CodeStake is Ownable, ReentrancyGuard {
         emit Unstaked(msg.sender, stakedAmount);
     }
 
-    function cliamReward(uint256 _positionIndex) external {
+    function cliamReward(uint256 _positionIndex) external nonReentrant {
         Position storage position = positions[msg.sender][_positionIndex];
 
         uint256 reward = _calculateReward(position);
@@ -94,10 +97,10 @@ contract CodeStake is Ownable, ReentrancyGuard {
         uint256 _lockInPeriod
     ) internal pure returns (uint256) {
         if (_lockInPeriod == 7 days) return 3;
-        if (_lockInPeriod == 30 days) return 5;
-        if (_lockInPeriod == 180 days) return 8;
-        if (_lockInPeriod == 365 days) return 10;
-        if (_lockInPeriod == 1095 days) return 12;
+        if (_lockInPeriod == 30 days) return 7;
+        if (_lockInPeriod == 180 days) return 10;
+        if (_lockInPeriod == 365 days) return 15;
+        if (_lockInPeriod == 1095 days) return 25;
         return 0;
     }
 
