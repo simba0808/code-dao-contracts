@@ -17,6 +17,7 @@ contract CodeStake is Ownable, ReentrancyGuard {
     IERC20 immutable codeToken;
 
     uint256 public totalStaked;
+    uint256 public totalRewardPool;
 
     mapping(address => Position[]) public positions;
 
@@ -75,6 +76,7 @@ contract CodeStake is Ownable, ReentrancyGuard {
 
         uint256 reward = _calculateReward(position);
         require(reward > 0, "No rewards available");
+        require(reward <= totalRewardPool, "Not enough reward tokens");
 
         codeToken.transfer(msg.sender, reward);
         emit RewardClaimed(msg.sender, reward);
@@ -104,6 +106,25 @@ contract CodeStake is Ownable, ReentrancyGuard {
         return 0;
     }
 
+    function depositReward(uint256 amount) external onlyOwner {
+        require(amount > 0, "Amount must be greater than 0");
+
+        IERC20(codeToken).transferFrom(msg.sender, address(this), amount);
+        totalRewardPool += amount;
+
+        emit RewardDeposited(amount);
+    }
+
+    function withdrawReward(uint256 amount) external onlyOwner {
+        require(amount > 0, "Amount must be greater than 0");
+        require(amount <= totalRewardPool, "Not enough reward tokens");
+
+        codeToken.transfer(msg.sender, amount);
+        totalRewardPool -= amount;
+
+        emit RewardWithdrawn(amount);
+    }
+
     event Staked(
         address indexed staker,
         uint256 amount,
@@ -112,4 +133,6 @@ contract CodeStake is Ownable, ReentrancyGuard {
     );
     event Unstaked(address indexed staker, uint256 amount);
     event RewardClaimed(address indexed staker, uint256 amount);
+    event RewardDeposited(uint256 amount);
+    event RewardWithdrawn(uint256 amount);
 }
